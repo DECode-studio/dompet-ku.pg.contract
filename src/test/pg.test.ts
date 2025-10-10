@@ -4,165 +4,161 @@ import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { MockERC20, MockUniswapV2Router, PaymentGateway } from "../../typechain-types";
 
 describe("PaymentGateway (TypeScript)", function () {
-    // --- Variabel Test ---
+    
     let owner: SignerWithAddress;
     let sender: SignerWithAddress;
     let recipient: SignerWithAddress;
+    let nonOwner: SignerWithAddress;
 
     let idrx: MockERC20;
     let usdt: MockERC20;
     let usdc: MockERC20;
+    let dai: MockERC20; 
     let mockRouter: MockUniswapV2Router;
-    let PaymentGateway: PaymentGateway;
-
-    // --- Konstanta ---
-    const EXCHANGE_RATE = 100;
+    let gateway: PaymentGateway;
+    
+    const EXCHANGE_RATE = 100; 
     const DECIMALS = 18;
     const parseUnits = (value: string | number) => ethers.parseUnits(value.toString(), DECIMALS);
 
-    // --- Setup (beforeEach) ---
+    
     beforeEach(async function () {
-        [owner, sender, recipient] = await ethers.getSigners();
-
+        [owner, sender, recipient, nonOwner] = await ethers.getSigners();
+        
         const MockERC20Factory = await ethers.getContractFactory("MockERC20");
         idrx = await MockERC20Factory.deploy("IDRX Token", "IDRX");
         usdt = await MockERC20Factory.deploy("Tether", "USDT");
         usdc = await MockERC20Factory.deploy("USD Coin", "USDC");
-
-        const idrxAddress = await idrx.getAddress();
-
+        dai = await MockERC20Factory.deploy("DAI Stablecoin", "DAI");
+        
         const MockUniswapV2RouterFactory = await ethers.getContractFactory("MockUniswapV2Router");
-        mockRouter = await MockUniswapV2RouterFactory.deploy(idrxAddress);
-        const routerAddress = await mockRouter.getAddress();
+        mockRouter = await MockUniswapV2RouterFactory.deploy(await idrx.getAddress());
 
-        const PaymentGatewayFactory = await ethers.getContractFactory("PaymentGateway");
-        PaymentGateway = await PaymentGatewayFactory.deploy(
-            idrxAddress,
-            await usdt.getAddress(),
-            await usdc.getAddress(),
-            routerAddress
+        const PaymentGateway = await ethers.getContractFactory("PaymentGateway");
+        gateway = await PaymentGateway.deploy(
+            await idrx.getAddress(),
+            await mockRouter.getAddress(),
+            [await usdt.getAddress(), await usdc.getAddress()] 
         );
-
-        await idrx.mint(routerAddress, parseUnits(1_000_000));
+        
+        await idrx.mint(await mockRouter.getAddress(), parseUnits(1_000_000));
     });
-
-    // --- Test Cases ---
-
+    
     describe("Deployment", function () {
-        it("Should set the right owner and token addresses", async function () {
-            expect(await PaymentGateway.owner()).to.equal(owner.address);
-            expect(await PaymentGateway.idrxToken()).to.equal(await idrx.getAddress());
-            expect(await PaymentGateway.usdtToken()).to.equal(await usdt.getAddress());
-            expect(await PaymentGateway.uniswapRouter()).to.equal(await mockRouter.getAddress());
+        it("Should set the correct owner, IDRX, and router addresses", async function () {
+            expect(await gateway.owner()).to.equal(owner.address);
+            expect(await gateway.idrxToken()).to.equal(await idrx.getAddress());
+            expect(await gateway.uniswapRouter()).to.equal(await mockRouter.getAddress());
+        });
+
+        it("Should correctly initialize the list of supported tokens", async function () {
+            expect(await gateway.isSupportedToken(await usdt.getAddress())).to.be.true;
+            expect(await gateway.isSupportedToken(await usdc.getAddress())).to.be.true;
+            expect(await gateway.isSupportedToken(await dai.getAddress())).to.be.false;
+            expect(await gateway.getSupportedTokensLength()).to.equal(2);
         });
     });
 
-    describe("Transfers without Swap", function () {
-        it("Should transfer IDRX successfully if sender has enough balance", async function () {
-            const amount = parseUnits(100);
-            const contractAddress = await PaymentGateway.getAddress();
-
+    describe("Direct Transfers (IDRX)", function () {
+        it("Should transfer IDRX directly from sender to recipient", async function () {
+            const amount = parseUnits(250);
             await idrx.mint(sender.address, amount);
-            await idrx.connect(sender).approve(contractAddress, amount);
+            await idrx.connect(sender).approve(await gateway.getAddress(), amount);
 
-            // ✅ Simpan transaksi dalam satu variabel
-            const tx = PaymentGateway.connect(sender).transfer(recipient.address, amount);
+            const tx = gateway.connect(sender).transfer(await idrx.getAddress(), recipient.address, BigInt(amount));
 
-            // ✅ Periksa semua ekspektasi pada transaksi yang sama
-            await expect(tx)
-                .to.changeTokenBalances(idrx, [sender, recipient], [-amount, amount]);
-            await expect(tx)
-                .to.emit(PaymentGateway, "TransferFromDuitku")
-                .withArgs(sender.address, recipient.address, amount, false, ethers.ZeroAddress, 0);
+            await expect(tx).to.changeTokenBalances(idrx, [sender, recipient], [-amount, amount]);
+            await expect(tx).to.emit(gateway, "PaymentProcessed")
+                .withArgs(sender.address, recipient.address, await idrx.getAddress(), amount, amount, false);
         });
     });
 
-    describe("Transfers with Swap", function () {
-        it("Should use USDT to swap for IDRX if IDRX balance is zero", async function () {
-            const amountToSend = parseUnits(500);
-            const usdtNeeded = amountToSend / BigInt(EXCHANGE_RATE);
-            const contractAddress = await PaymentGateway.getAddress();
+    describe("Swap Transfers (Supported Tokens)", function () {
+        it("Should swap USDT for IDRX and send to recipient", async function () {
+            const amountIn = parseUnits(10); 
+            const expectedAmountOut = amountIn * BigInt(EXCHANGE_RATE); 
 
-            await usdt.mint(sender.address, usdtNeeded);
-            await usdt.connect(sender).approve(contractAddress, usdtNeeded);
+            await usdt.mint(sender.address, amountIn);
+            await usdt.connect(sender).approve(await gateway.getAddress(), amountIn);
 
-            // ✅ Simpan transaksi dalam satu variabel
-            const tx = PaymentGateway.connect(sender).transfer(recipient.address, amountToSend);
-            const usdtAddress = await usdt.getAddress();
+            const tx = gateway.connect(sender).transfer(await usdt.getAddress(), recipient.address, amountIn);
 
-            // ✅ Periksa semua ekspektasi pada transaksi yang sama
-            await expect(tx).to.changeTokenBalances(usdt, [sender], [-usdtNeeded]);
-            await expect(tx).to.changeTokenBalances(idrx, [recipient], [amountToSend]);
-            await expect(tx)
-                .to.emit(PaymentGateway, "TransferFromDuitku")
-                .withArgs(sender.address, recipient.address, amountToSend, true, usdtAddress, usdtNeeded);
+            await expect(tx).to.changeTokenBalances(usdt, [sender], [-amountIn]);
+            await expect(tx).to.changeTokenBalances(idrx, [recipient], [expectedAmountOut]);
+            await expect(tx).to.emit(gateway, "PaymentProcessed")
+                .withArgs(sender.address, recipient.address, await usdt.getAddress(), amountIn, expectedAmountOut, true);
+        });
+    });
+
+    describe("Admin Functions", function () {
+        describe("addSupportedToken", function () {
+            it("Should allow owner to add a new supported token", async function () {
+                const daiAddress = await dai.getAddress();
+                await expect(gateway.connect(owner).addSupportedToken(daiAddress))
+                    .to.emit(gateway, "SupportedTokenAdded").withArgs(daiAddress);
+
+                expect(await gateway.isSupportedToken(daiAddress)).to.be.true;
+                expect(await gateway.getSupportedTokensLength()).to.equal(3);
+            });
+
+            it("Should prevent non-owner from adding a token", async function () {
+                await expect(gateway.connect(nonOwner).addSupportedToken(await dai.getAddress()))
+                    .to.be.revertedWithCustomError(gateway, "OwnableUnauthorizedAccount");
+            });
+
+            it("Should revert when adding an already supported token", async function () {
+                await expect(gateway.connect(owner).addSupportedToken(await usdt.getAddress()))
+                    .to.be.revertedWith("Token already supported");
+            });
         });
 
-        it("Should use partial IDRX and swap the rest from USDC", async function () {
-            const partialIdrx = parseUnits(200);
-            const amountToSend = parseUnits(1000);
-            const neededFromSwap = amountToSend - partialIdrx;
-            const usdcNeeded = neededFromSwap / BigInt(EXCHANGE_RATE);
-            const contractAddress = await PaymentGateway.getAddress();
-            const usdcAddress = await usdc.getAddress();
+        describe("removeSupportedToken", function () {
+            it("Should allow owner to remove a supported token", async function () {
+                const usdtAddress = await usdt.getAddress();
+                await expect(gateway.connect(owner).removeSupportedToken(usdtAddress))
+                    .to.emit(gateway, "SupportedTokenRemoved").withArgs(usdtAddress);
 
-            await idrx.mint(sender.address, partialIdrx);
-            await usdc.mint(sender.address, usdcNeeded);
-            await idrx.connect(sender).approve(contractAddress, partialIdrx);
-            await usdc.connect(sender).approve(contractAddress, usdcNeeded);
+                expect(await gateway.isSupportedToken(usdtAddress)).to.be.false;
+                expect(await gateway.getSupportedTokensLength()).to.equal(1);
+            });
 
-            const tx = PaymentGateway.connect(sender).transfer(recipient.address, amountToSend);
+            it("Should prevent non-owner from removing a token", async function () {
+                await expect(gateway.connect(nonOwner).removeSupportedToken(await usdt.getAddress()))
+                    .to.be.revertedWithCustomError(gateway, "OwnableUnauthorizedAccount");
+            });
 
-            await expect(tx).to.changeTokenBalances(idrx, [sender, recipient], [-partialIdrx, amountToSend]);
-            await expect(tx).to.changeTokenBalances(usdc, [sender], [-usdcNeeded]);
-            await expect(tx)
-                .to.emit(PaymentGateway, "TransferFromDuitku")
-                .withArgs(sender.address, recipient.address, amountToSend, true, usdcAddress, usdcNeeded);
-        });
-
-        it("Should prioritize USDT over USDC for swapping", async function () {
-            const amountToSend = parseUnits(500);
-            const usdtNeeded = amountToSend / BigInt(EXCHANGE_RATE);
-            const contractAddress = await PaymentGateway.getAddress();
-
-            await usdt.mint(sender.address, usdtNeeded);
-            await usdc.mint(sender.address, parseUnits(100));
-            await usdt.connect(sender).approve(contractAddress, usdtNeeded);
-            await usdc.connect(sender).approve(contractAddress, parseUnits(100));
-
-            // ✅ Simpan transaksi dalam satu variabel
-            const tx = PaymentGateway.connect(sender).transfer(recipient.address, amountToSend);
-
-            // ✅ Periksa semua ekspektasi pada transaksi yang sama
-            await expect(tx).to.changeTokenBalances(usdt, [sender], [-usdtNeeded]);
-            await expect(tx).to.changeTokenBalances(usdc, [sender], [0]);
+            it("Should revert when removing an unsupported token", async function () {
+                await expect(gateway.connect(owner).removeSupportedToken(await dai.getAddress()))
+                    .to.be.revertedWith("Token not supported");
+            });
         });
     });
 
     describe("Failure Cases", function () {
-        it("Should revert if all balances (IDRX, USDT, USDC) are insufficient", async function () {
-            const amount = parseUnits(1000);
-            await expect(
-                PaymentGateway.connect(sender).transfer(recipient.address, amount)
-            ).to.be.revertedWith("Insufficient balance in USDT/USDC or approval not set");
+        it("Should revert when transferring an unsupported token", async function () {
+            await expect(gateway.connect(sender).transfer(await dai.getAddress(), recipient.address, parseUnits(10)))
+                .to.be.revertedWith("Token not supported");
         });
 
-        it("Should revert if balance is sufficient but approval is not given", async function () {
+        it("Should revert a swap if sender has not approved the token", async function () {
+            const amountIn = parseUnits(10);
+            await usdt.mint(sender.address, amountIn);
+            
+            await expect(gateway.connect(sender).transfer(await usdt.getAddress(), recipient.address, amountIn))
+                .to.be.revertedWithCustomError(usdt, "ERC20InsufficientAllowance");
+        });
+
+        it("Should revert a direct transfer if sender has not approved IDRX", async function () {
             const amount = parseUnits(100);
             await idrx.mint(sender.address, amount);
-
-            // ✅ Gunakan revertedWithCustomError untuk menangkap error dari OpenZeppelin versi baru
-            // Argumen pertama adalah objek kontrak yang MENDIFINISIKAN error (yaitu token IDRX)
-            // Argumen kedua adalah nama error sebagai string
-            await expect(
-                PaymentGateway.connect(sender).transfer(recipient.address, amount)
-            ).to.be.revertedWithCustomError(idrx, "ERC20InsufficientAllowance");
+            
+            await expect(gateway.connect(sender).transfer(await idrx.getAddress(), recipient.address, amount))
+                .to.be.revertedWithCustomError(idrx, "ERC20InsufficientAllowance");
         });
-
-        it("Should revert for zero amount transfer", async function () {
-            await expect(
-                PaymentGateway.connect(sender).transfer(recipient.address, 0)
-            ).to.be.revertedWith("Transfer amount must be greater than zero");
+        
+        it("Should revert for zero amount transfer", async function() {
+            await expect(gateway.connect(sender).transfer(await idrx.getAddress(), recipient.address, 0))
+                .to.be.revertedWith("Transfer amount must be greater than zero");
         });
     });
 });
