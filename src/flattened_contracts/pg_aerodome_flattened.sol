@@ -160,30 +160,32 @@ interface IERC20 {
     ) external view returns (uint256);
 }
 
-// Struct PoolKey dari Aerodrome (untuk path)
-struct PoolKey {
-    address currency0;
-    address currency1;
-    uint24 fee;
+// Struct Route dari Aerodrome (untuk path)
+struct Route {
+    address from;
+    address to;
+    bool stable;
+    address factory;
 }
 
-// Interface Aerodrome Router (kompatibel V2 tapi path IPoolKey[])
+// Interface Aerodrome Router (path sebagai Route[])
 interface IAerodromeRouter {
     function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
-        PoolKey[] calldata pools, // Path sebagai array PoolKey (bukan address[])
+        uint256 amountIn,
+        uint256 amountOutMin,
+        Route[] calldata routes,
         address to,
         uint deadline
-    ) external returns (uint[] memory amounts);
+    ) external returns (uint256[] memory amounts);
 }
 
 contract PaymentGatewayAerodrome is Ownable {
     IERC20 public immutable idrxToken;
     IAerodromeRouter public immutable aerodromeRouter;
+    address public constant AERODROME_FACTORY = 0x420DD381b31aEf6683db6B902084cB0FFECe40Da; // Default factory Aerodrome Base
 
     mapping(address => bool) public isSupportedToken;
-    mapping(address => uint24) public tokenFeeTier; // Fee tier per token (untuk PoolKey)
+    mapping(address => bool) public tokenStablePool; // True untuk stable pool, false volatile
 
     address[] public supportedTokens;
 
@@ -196,27 +198,27 @@ contract PaymentGatewayAerodrome is Ownable {
         bool isSwapped
     );
 
-    event SupportedTokenAdded(address indexed token, uint24 fee);
+    event SupportedTokenAdded(address indexed token, bool stable);
     event SupportedTokenRemoved(address indexed token);
 
     constructor(
         address _idrxAddress,
         address _routerAddress, // Aerodrome Router: 0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43
         address[] memory _initialSupportedTokens,
-        uint24[] memory _initialFees // Opsional, sama panjang dengan tokens
+        bool[] memory _initialStable // Sama panjang dengan tokens (true=stable pool, false=volatile)
     ) Ownable(msg.sender) {
-        require(_initialSupportedTokens.length == _initialFees.length, "Mismatched arrays");
+        require(_initialSupportedTokens.length == _initialStable.length, "Mismatched arrays");
         idrxToken = IERC20(_idrxAddress);
         aerodromeRouter = IAerodromeRouter(_routerAddress);
 
         for (uint i = 0; i < _initialSupportedTokens.length; i++) {
             address token = _initialSupportedTokens[i];
-            uint24 fee = _initialFees[i];
+            bool stable = _initialStable[i];
             if (token != address(0) && !isSupportedToken[token]) {
                 isSupportedToken[token] = true;
-                tokenFeeTier[token] = fee;
+                tokenStablePool[token] = stable;
                 supportedTokens.push(token);
-                emit SupportedTokenAdded(token, fee);
+                emit SupportedTokenAdded(token, stable);
             }
         }
     }
@@ -255,19 +257,20 @@ contract PaymentGatewayAerodrome is Ownable {
 
         _tokenIn.approve(address(aerodromeRouter), _amountIn);
 
-        // Buat PoolKey single-hop: tokenIn-IDRX dengan fee dari mapping
-        PoolKey memory pool = PoolKey({
-            currency0: _tokenIn < idrxToken ? address(_tokenIn) : address(idrxToken), // Sort token0 < token1
-            currency1: _tokenIn < idrxToken ? address(idrxToken) : address(_tokenIn),
-            fee: tokenFeeTier[address(_tokenIn)]
+        // Buat Route single-hop: tokenIn → IDRX
+        Route memory route = Route({
+            from: address(_tokenIn),
+            to: address(idrxToken),
+            stable: tokenStablePool[address(_tokenIn)],
+            factory: AERODROME_FACTORY
         });
-        PoolKey[] memory pools = new PoolKey[](1);
-        pools[0] = pool;
+        Route[] memory routes = new Route[](1);
+        routes[0] = route;
 
         uint[] memory amountsOut = aerodromeRouter.swapExactTokensForTokens(
             _amountIn,
-            0, // amountOutMin=0 (ubah ke slippage protection kalau perlu)
-            pools, // Path sebagai PoolKey[]
+            0, // amountOutMin=0 (ubah ke dynamic via getAmountsOut kalau perlu)
+            routes,
             _recipient,
             block.timestamp + 300 // Deadline 5 min
         );
@@ -284,23 +287,22 @@ contract PaymentGatewayAerodrome is Ownable {
         );
     }
 
-    function addSupportedToken(address _tokenAddress, uint24 _fee) external onlyOwner {
+    function addSupportedToken(address _tokenAddress, bool _stable) external onlyOwner {
         require(_tokenAddress != address(0), "Cannot add zero address");
         require(_tokenAddress != address(idrxToken), "Cannot add IDRX token as swappable");
         require(!isSupportedToken[_tokenAddress], "Token already supported");
-        require(_fee > 0, "Fee must be >0");
 
         isSupportedToken[_tokenAddress] = true;
-        tokenFeeTier[_tokenAddress] = _fee;
+        tokenStablePool[_tokenAddress] = _stable;
         supportedTokens.push(_tokenAddress);
-        emit SupportedTokenAdded(_tokenAddress, _fee);
+        emit SupportedTokenAdded(_tokenAddress, _stable);
     }
 
     function removeSupportedToken(address _tokenAddress) external onlyOwner {
         require(isSupportedToken[_tokenAddress], "Token not supported");
 
         isSupportedToken[_tokenAddress] = false;
-        delete tokenFeeTier[_tokenAddress];
+        delete tokenStablePool[_tokenAddress];
 
         for (uint i = 0; i < supportedTokens.length; i++) {
             if (supportedTokens[i] == _tokenAddress) {
@@ -312,10 +314,9 @@ contract PaymentGatewayAerodrome is Ownable {
         emit SupportedTokenRemoved(_tokenAddress);
     }
 
-    function setFeeTier(address _tokenAddress, uint24 _fee) external onlyOwner {
+    function setStablePool(address _tokenAddress, bool _stable) external onlyOwner {
         require(isSupportedToken[_tokenAddress], "Token not supported");
-        require(_fee > 0, "Fee must be >0");
-        tokenFeeTier[_tokenAddress] = _fee;
+        tokenStablePool[_tokenAddress] = _stable;
     }
 
     function getSupportedTokensLength() external view returns (uint256) {

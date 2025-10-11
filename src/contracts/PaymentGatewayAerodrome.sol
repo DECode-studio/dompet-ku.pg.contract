@@ -33,12 +33,12 @@ struct Route {
 // Interface Aerodrome Router (path sebagai Route[])
 interface IAerodromeRouter {
     function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
+        uint256 amountIn,
+        uint256 amountOutMin,
         Route[] calldata routes,
         address to,
         uint deadline
-    ) external returns (uint[] memory amounts);
+    ) external returns (uint256[] memory amounts);
 }
 
 contract PaymentGatewayAerodrome is Ownable {

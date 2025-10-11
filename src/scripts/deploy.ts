@@ -18,6 +18,7 @@ async function main() {
 
   const contract = await Contract.deploy(
     '0x18Bc5bcC660cf2B9cE3cd51a404aFe1a0cBD3C22', // IDRT Address
+    // '0x01D40099fCD87C018969B0e8D4aB1633Fb34763C', // Aerodome Unoversal Router
     '0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43', // Aerodome Router Address 
     //'0x2626664c2603336E57B271c5C0b26F421741e481', // Uniswap Router Address
     [
@@ -55,5 +56,5 @@ main().catch((error) => {
 // IDRT Address       : 0xb4a911eC34eDaaEFC393c52bbD926790B9219df4
 // PG Address MAIN    : 0xe12471376774990223DBEfD9Ce37d00F182B8108
 // PG V3 Address MAIN : 0xC2Bbc9b56e496fA23e543018f7d0ED360453C3C6
-// PG Aerodome Address: 0xFA311B3C424649334b2110163f361A496D1c87fd
+// PG Aerodome Address: 0x580f2ee521638D718d5F1BF26dC5cf0cF1B62E9D
 // PG Address TEST    : 0xF043b0b91C8F5b6C2DC63897f1632D6D15e199A9
