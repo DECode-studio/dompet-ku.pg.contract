@@ -11,7 +11,7 @@
     "test": "hardhat test ./src/test/*",
     "case-test": "hardhat test ./src/test/app.test.ts",
     "real-test": "hardhat test ./src/test/real.test.ts",
-    "flatten": "hardhat flatten src/contracts/PaymentGatewayV3.sol > src/flattened_contracts/pgV3_flattened.sol"
+    "flatten": "hardhat flatten src/contracts/PaymentGatewayAerodrome.sol > src/flattened_contracts/pg_aerodome_flattened.sol"
   },
   "keywords": [],
   "author": "",

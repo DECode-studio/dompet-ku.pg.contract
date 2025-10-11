@@ -3,11 +3,12 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-// Struct PoolKey dari Aerodrome (untuk path)
-struct PoolKey {
-    address currency0;
-    address currency1;
-    uint24 fee;
+// Struct Route dari Aerodrome (untuk path)
+struct Route {
+    address from;
+    address to;
+    bool stable;
+    address factory;
 }
 
 // Interface Aerodrome Router
@@ -15,7 +16,7 @@ interface IAerodromeRouter {
     function swapExactTokensForTokens(
         uint amountIn,
         uint amountOutMin,
-        PoolKey[] calldata pools, // Path sebagai array PoolKey (bukan address[])
+        Route[] calldata routes, // Path sebagai array Route
         address to,
         uint deadline
     ) external returns (uint[] memory amounts);
@@ -24,6 +25,7 @@ interface IAerodromeRouter {
 contract MockAerodromeSwapRouter is IAerodromeRouter {
     IERC20 public immutable idrxToken;
     uint256 public constant EXCHANGE_RATE = 100; // 1 tokenIn = 100 IDRX (mock rate)
+    address public constant MOCK_FACTORY = 0x420DD381b31aEf6683db6B902084cB0FFECe40Da; // Mock Aerodrome factory
 
     event SwapExecuted(address indexed tokenIn, address indexed recipient, uint256 amountIn, uint256 amountOut);
 
@@ -34,18 +36,18 @@ contract MockAerodromeSwapRouter is IAerodromeRouter {
     function swapExactTokensForTokens(
         uint amountIn,
         uint amountOutMin,
-        PoolKey[] calldata pools,
+        Route[] calldata routes,
         address to,
         uint deadline
     ) external override returns (uint[] memory amounts) {
         require(block.timestamp <= deadline, "Mock: Transaction expired");
-        require(pools.length == 1, "Mock: Only single pool supported");
-        PoolKey memory pool = pools[0];
-        require(pool.currency0 != address(0) && pool.currency1 != address(0), "Mock: Invalid pool");
-        require(pool.fee > 0, "Mock: Fee must be >0");
+        require(routes.length == 1, "Mock: Only single route supported");
+        Route memory route = routes[0];
+        require(route.from != address(0) && route.to != address(0), "Mock: Invalid route");
+        require(route.factory == MOCK_FACTORY, "Mock: Invalid factory"); // Optional check
 
         // Simulate transfer of tokenIn from caller (gateway) to this router (hold/burn)
-        IERC20(pool.currency0).transferFrom(msg.sender, address(this), amountIn);
+        IERC20(route.from).transferFrom(msg.sender, address(this), amountIn);
 
         // Calculate output based on exchange rate
         uint256 amountOut = amountIn * EXCHANGE_RATE;
@@ -54,7 +56,7 @@ contract MockAerodromeSwapRouter is IAerodromeRouter {
         // Transfer IDRX to recipient from liquidity (assume pre-minted to mock)
         idrxToken.transfer(to, amountOut);
 
-        emit SwapExecuted(pool.currency0, to, amountIn, amountOut);
+        emit SwapExecuted(route.from, to, amountIn, amountOut);
 
         // Return amounts array
         amounts = new uint[](2);

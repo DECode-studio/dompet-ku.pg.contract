@@ -39,7 +39,7 @@ describe("PaymentGateway (TypeScript)", function () {
             await idrx.getAddress(),
             await mockRouter.getAddress(),
             [await usdt.getAddress(), await usdc.getAddress()],
-            [3000, 500]
+            [true, true]
         );
 
         await idrx.mint(await mockRouter.getAddress(), parseUnits(1_000_000));
@@ -96,8 +96,8 @@ describe("PaymentGateway (TypeScript)", function () {
                 const daiAddress = await dai.getAddress();
                 const fee = 1000
 
-                await expect(gateway.connect(owner).addSupportedToken(daiAddress, fee))
-                    .to.emit(gateway, "SupportedTokenAdded").withArgs(daiAddress, fee);
+                await expect(gateway.connect(owner).addSupportedToken(daiAddress, true))
+                    .to.emit(gateway, "SupportedTokenAdded").withArgs(daiAddress, true);
 
                 expect(await gateway.isSupportedToken(daiAddress)).to.be.true;
                 expect(await gateway.getSupportedTokensLength()).to.equal(3);
@@ -107,7 +107,7 @@ describe("PaymentGateway (TypeScript)", function () {
                 const daiAddress = await dai.getAddress();
                 const fee = 1000
 
-                await expect(gateway.connect(nonOwner).addSupportedToken(daiAddress, fee))
+                await expect(gateway.connect(nonOwner).addSupportedToken(daiAddress, true))
                     .to.be.revertedWithCustomError(gateway, "OwnableUnauthorizedAccount");
             });
 
@@ -115,7 +115,7 @@ describe("PaymentGateway (TypeScript)", function () {
                 const usdtAddress = await usdt.getAddress();
                 const fee = 1000
 
-                await expect(gateway.connect(owner).addSupportedToken(usdtAddress, fee))
+                await expect(gateway.connect(owner).addSupportedToken(usdtAddress, true))
                     .to.be.revertedWith("Token already supported");
             });
         });
