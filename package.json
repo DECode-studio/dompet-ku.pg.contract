@@ -10,7 +10,8 @@
     "deploy": "npx hardhat run src/scripts/deploy.ts --network base",
     "test": "hardhat test ./src/test/*",
     "case-test": "hardhat test ./src/test/app.test.ts",
-    "real-test": "hardhat test ./src/test/real.test.ts"
+    "real-test": "hardhat test ./src/test/real.test.ts",
+    "flatten": "hardhat flatten src/contracts/PaymentGateway.sol > src/flattened_contracts/pg_flattened.sol"
   },
   "keywords": [],
   "author": "",

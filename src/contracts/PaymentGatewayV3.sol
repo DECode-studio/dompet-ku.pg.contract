@@ -22,36 +22,31 @@ interface IERC20 {
     ) external view returns (uint256);
 }
 
-interface IUniswapV2Router02 {
-    function getAmountsIn(
-        uint amountOut,
-        address[] calldata path
-    ) external view returns (uint[] memory amounts);
+interface ISwapRouter {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 deadline;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
 
-    function swapTokensForExactTokens(
-        uint amountOut,
-        uint amountInMax,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-
-    function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
 }
 
-contract PaymentGateway is Ownable {
+contract PaymentGatewayV3 is Ownable {
     IERC20 public immutable idrxToken;
-    IUniswapV2Router02 public immutable uniswapRouter;
+    ISwapRouter public immutable swapRouter;
 
     mapping(address => bool) public isSupportedToken;
 
     address[] public supportedTokens;
+
+    // Fee tier untuk pair (default 3000 = 0.3%)
+    mapping(address => uint24) public tokenFeeTier; // key: tokenIn
 
     event PaymentProcessed(
         address indexed from,
@@ -62,22 +57,27 @@ contract PaymentGateway is Ownable {
         bool isSwapped
     );
 
-    event SupportedTokenAdded(address indexed token);
+    event SupportedTokenAdded(address indexed token, uint24 fee);
     event SupportedTokenRemoved(address indexed token);
 
     constructor(
         address _idrxAddress,
         address _routerAddress,
-        address[] memory _initialSupportedTokens
+        address[] memory _initialSupportedTokens,
+        uint24[] memory _initialFees // harus sama panjang dengan _initialSupportedTokens
     ) Ownable(msg.sender) {
+        require(_initialSupportedTokens.length == _initialFees.length, "Mismatched arrays");
         idrxToken = IERC20(_idrxAddress);
-        uniswapRouter = IUniswapV2Router02(_routerAddress);
+        swapRouter = ISwapRouter(_routerAddress);
 
         for (uint i = 0; i < _initialSupportedTokens.length; i++) {
             address token = _initialSupportedTokens[i];
+            uint24 fee = _initialFees[i];
             if (token != address(0) && !isSupportedToken[token]) {
                 isSupportedToken[token] = true;
+                tokenFeeTier[token] = fee;
                 supportedTokens.push(token);
+                emit SupportedTokenAdded(token, fee);
             }
         }
     }
@@ -114,21 +114,20 @@ contract PaymentGateway is Ownable {
     ) private {
         _tokenIn.transferFrom(msg.sender, address(this), _amountIn);
 
-        _tokenIn.approve(address(uniswapRouter), _amountIn);
+        _tokenIn.approve(address(swapRouter), _amountIn);
 
-        address[] memory path = new address[](2);
-        path[0] = address(_tokenIn);
-        path[1] = address(idrxToken);
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
+            tokenIn: address(_tokenIn),
+            tokenOut: address(idrxToken),
+            fee: tokenFeeTier[address(_tokenIn)],
+            recipient: _recipient,
+            deadline: block.timestamp,
+            amountIn: _amountIn,
+            amountOutMinimum: 0, // Bisa diubah ke nilai slippage protection
+            sqrtPriceLimitX96: 0
+        });
 
-        uint[] memory amountsOut = uniswapRouter.swapExactTokensForTokens(
-            _amountIn,
-            0,
-            path,
-            _recipient,
-            block.timestamp
-        );
-
-        uint256 idrxReceived = amountsOut[amountsOut.length - 1];
+        uint256 idrxReceived = swapRouter.exactInputSingle(params);
 
         emit PaymentProcessed(
             msg.sender,
@@ -140,23 +139,26 @@ contract PaymentGateway is Ownable {
         );
     }
 
-    function addSupportedToken(address _tokenAddress) external onlyOwner {
+    function addSupportedToken(address _tokenAddress, uint24 _fee) external onlyOwner {
         require(_tokenAddress != address(0), "Cannot add zero address");
         require(
             _tokenAddress != address(idrxToken),
             "Cannot add IDRX token as swappable"
         );
         require(!isSupportedToken[_tokenAddress], "Token already supported");
+        require(_fee > 0, "Fee must be greater than zero");
 
         isSupportedToken[_tokenAddress] = true;
+        tokenFeeTier[_tokenAddress] = _fee;
         supportedTokens.push(_tokenAddress);
-        emit SupportedTokenAdded(_tokenAddress);
+        emit SupportedTokenAdded(_tokenAddress, _fee);
     }
 
     function removeSupportedToken(address _tokenAddress) external onlyOwner {
         require(isSupportedToken[_tokenAddress], "Token not supported");
 
         isSupportedToken[_tokenAddress] = false;
+        delete tokenFeeTier[_tokenAddress];
 
         for (uint i = 0; i < supportedTokens.length; i++) {
             if (supportedTokens[i] == _tokenAddress) {
@@ -173,5 +175,12 @@ contract PaymentGateway is Ownable {
 
     function getSupportedTokensLength() external view returns (uint256) {
         return supportedTokens.length;
+    }
+
+    // Fungsi helper untuk set fee tier token existing (optional)
+    function setFeeTier(address _tokenAddress, uint24 _fee) external onlyOwner {
+        require(isSupportedToken[_tokenAddress], "Token not supported");
+        require(_fee > 0, "Fee must be greater than zero");
+        tokenFeeTier[_tokenAddress] = _fee;
     }
 }
