@@ -47,6 +47,10 @@ const config: HardhatUserConfig = {
       url: process.env.RPC_BNB_URL ?? "",
       accounts: [process.env.PRIVATE_KEY ?? ""]
     },
+    lisk: {
+      url: 'https://rpc.api.lisk.com',
+      accounts: [process.env.PRIVATE_KEY ?? ""]
+    },
 
     // MAINET CONFIG
     ethereum_sepolia: {

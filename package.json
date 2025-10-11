@@ -7,7 +7,7 @@
     "generate": "hardhat init",
     "compile": "hardhat compile",
     "clean": "hardhat clean",
-    "deploy": "npx hardhat run src/scripts/deploy.ts --network base",
+    "deploy": "npx hardhat run src/scripts/deploy.ts --network lisk",
     "test": "hardhat test ./src/test/*",
     "case-test": "hardhat test ./src/test/app.test.ts",
     "real-test": "hardhat test ./src/test/real.test.ts",
