@@ -3,27 +3,26 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-// Antarmuka (interface) minimal untuk token ERC20
+//
 interface IERC20 {
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool);
+
     function approve(address spender, uint256 amount) external returns (bool);
+
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
-// ----------------------------------------------------------------------------
-// ANTARMUKA KHUSUS UNTUK AERODROME ROUTER
-// ----------------------------------------------------------------------------
-
-// Struct `Route` adalah cara Aerodrome mendefinisikan jalur swap.
-// Ini adalah bagian paling penting.
 struct Route {
-    address from;   // Token asal
-    address to;     // Token tujuan
-    bool stable;    // KRUSIAL: `true` untuk stable pool, `false` untuk volatile pool
-    address factory;// Alamat factory Aerodrome
+    address from;
+    address to;
+    bool stable;
+    address factory;
 }
 
-// Antarmuka untuk Aerodrome Router V2
 interface IAerodromeRouter {
     function swapExactTokensForTokens(
         uint amountIn,
@@ -34,10 +33,6 @@ interface IAerodromeRouter {
     ) external returns (uint[] memory amounts);
 }
 
-// ----------------------------------------------------------------------------
-// KONTRAK UTAMA
-// ----------------------------------------------------------------------------
-
 /**
  * @title PaymentGatewayAerodromeUniversal
  * @author (Your Name)
@@ -45,30 +40,18 @@ interface IAerodromeRouter {
  * token yang didukung dan menukarnya (swap) menjadi token IDRX
  * secara otomatis melalui Aerodrome Finance di jaringan Base.
  */
-contract PaymentGatewayAerodromeUniversal is Ownable {
-    // --- State Variables ---
-
-    // Token tujuan (misalnya IDRX) yang akan diterima oleh pengguna akhir.
+contract PaymentGatewayAerodromeRouter is Ownable {
     IERC20 public immutable idrxToken;
 
-    // Instance dari Aerodrome Router yang akan kita gunakan untuk swap.
     IAerodromeRouter public immutable aerodromeRouter;
 
-    // Alamat Factory Aerodrome, ini adalah konstanta yang diperlukan oleh router.
-    address public constant AERODROME_FACTORY = 0x420DD381b31aEf6683db6B902084cB0FFECe40Da;
+    address public constant AERODROME_FACTORY =
+        0x420DD381b31aEf6683db6B902084cB0FFECe40Da;
 
-    // Mapping untuk memeriksa dengan cepat apakah sebuah token didukung.
     mapping(address => bool) public isSupportedToken;
-
-    // KRUSIAL: Mapping untuk menyimpan jenis pool (stable atau volatile)
-    // untuk setiap token yang didukung saat di-swap ke IDRX.
     mapping(address => bool) public tokenUsesStablePool;
 
-    // Array untuk menyimpan daftar semua token yang didukung.
     address[] public supportedTokens;
-
-    // --- Events ---
-
     event PaymentProcessed(
         address indexed from,
         address indexed to,
@@ -81,8 +64,6 @@ contract PaymentGatewayAerodromeUniversal is Ownable {
     event SupportedTokenAdded(address indexed token, bool isStablePool);
     event SupportedTokenRemoved(address indexed token);
     event TokenPoolTypeUpdated(address indexed token, bool isStablePool);
-
-    // --- Constructor ---
 
     /**
      * @notice Men-deploy kontrak dan menginisialisasi parameter utama.
@@ -97,8 +78,14 @@ contract PaymentGatewayAerodromeUniversal is Ownable {
         address[] memory _initialSupportedTokens,
         bool[] memory _initialIsStable
     ) Ownable(msg.sender) {
-        require(_idrxAddress != address(0) && _aerodromeRouterAddress != address(0), "Zero address");
-        require(_initialSupportedTokens.length == _initialIsStable.length, "Mismatched initial arrays");
+        require(
+            _idrxAddress != address(0) && _aerodromeRouterAddress != address(0),
+            "Zero address"
+        );
+        require(
+            _initialSupportedTokens.length == _initialIsStable.length,
+            "Mismatched initial arrays"
+        );
 
         idrxToken = IERC20(_idrxAddress);
         aerodromeRouter = IAerodromeRouter(_aerodromeRouterAddress);
@@ -107,8 +94,6 @@ contract PaymentGatewayAerodromeUniversal is Ownable {
             _addToken(_initialSupportedTokens[i], _initialIsStable[i]);
         }
     }
-
-    // --- External Functions ---
 
     /**
      * @notice Fungsi utama yang dipanggil pengguna untuk memproses pembayaran.
@@ -127,47 +112,47 @@ contract PaymentGatewayAerodromeUniversal is Ownable {
         require(_amountIn > 0, "Amount must be greater than zero");
 
         if (_tokenIn == address(idrxToken)) {
-            // Jika tokennya sudah IDRX, langsung transfer saja.
             idrxToken.transferFrom(msg.sender, _to, _amountIn);
-            emit PaymentProcessed(msg.sender, _to, _tokenIn, _amountIn, _amountIn, false);
+            emit PaymentProcessed(
+                msg.sender,
+                _to,
+                _tokenIn,
+                _amountIn,
+                _amountIn,
+                false
+            );
         } else if (isSupportedToken[_tokenIn]) {
-            // Jika token didukung, lakukan swap.
             _swapAndSend(IERC20(_tokenIn), _to, _amountIn);
         } else {
             revert("Token not supported");
         }
     }
 
-    // --- Internal Functions ---
-
     /**
      * @notice Logika internal untuk melakukan swap.
      */
-    function _swapAndSend(IERC20 _tokenIn, address _recipient, uint256 _amountIn) private {
-        // 1. Tarik token dari pengguna ke kontrak ini.
+    function _swapAndSend(
+        IERC20 _tokenIn,
+        address _recipient,
+        uint256 _amountIn
+    ) private {
         _tokenIn.transferFrom(msg.sender, address(this), _amountIn);
-
-        // 2. Beri izin (approve) kepada Aerodrome Router untuk menarik token dari kontrak ini.
         _tokenIn.approve(address(aerodromeRouter), _amountIn);
 
-        // 3. Buat `Route` untuk swap. Ini adalah langkah paling penting.
-        // Kita hanya melakukan swap 1-langkah (single hop) dari tokenIn -> idrxToken.
         Route[] memory routes = new Route[](1);
         routes[0] = Route({
             from: address(_tokenIn),
             to: address(idrxToken),
-            stable: tokenUsesStablePool[address(_tokenIn)], // Mengambil jenis pool dari mapping
+            stable: tokenUsesStablePool[address(_tokenIn)],
             factory: AERODROME_FACTORY
         });
 
-        // 4. Panggil fungsi swap di router Aerodrome.
-        // Hasil swap akan langsung dikirim ke `_recipient`.
         uint[] memory amountsOut = aerodromeRouter.swapExactTokensForTokens(
             _amountIn,
-            0, // amountOutMin: 0. Untuk produksi, gunakan nilai yang wajar untuk proteksi slippage.
+            0,
             routes,
             _recipient,
-            block.timestamp + 300 // Deadline 5 menit
+            block.timestamp + 300
         );
 
         uint256 idrxReceived = amountsOut[amountsOut.length - 1];
@@ -186,7 +171,10 @@ contract PaymentGatewayAerodromeUniversal is Ownable {
      * @notice Logika internal untuk menambahkan token, digunakan oleh constructor dan fungsi owner.
      */
     function _addToken(address _tokenAddress, bool _isStablePool) private {
-        require(_tokenAddress != address(0) && _tokenAddress != address(idrxToken), "Invalid token address");
+        require(
+            _tokenAddress != address(0) && _tokenAddress != address(idrxToken),
+            "Invalid token address"
+        );
         require(!isSupportedToken[_tokenAddress], "Token already supported");
 
         isSupportedToken[_tokenAddress] = true;
@@ -196,15 +184,15 @@ contract PaymentGatewayAerodromeUniversal is Ownable {
         emit SupportedTokenAdded(_tokenAddress, _isStablePool);
     }
 
-
-    // --- Owner-Only Administrative Functions ---
-
     /**
      * @notice Menambahkan token baru yang didukung.
      * @param _tokenAddress Alamat token yang akan ditambahkan.
      * @param _isStablePool `true` jika pool swap-nya adalah stable pool.
      */
-    function addSupportedToken(address _tokenAddress, bool _isStablePool) external onlyOwner {
+    function addSupportedToken(
+        address _tokenAddress,
+        bool _isStablePool
+    ) external onlyOwner {
         _addToken(_tokenAddress, _isStablePool);
     }
 
@@ -217,10 +205,11 @@ contract PaymentGatewayAerodromeUniversal is Ownable {
         isSupportedToken[_tokenAddress] = false;
         delete tokenUsesStablePool[_tokenAddress];
 
-        // Hapus dari array `supportedTokens` dengan efisien (swap and pop).
         for (uint i = 0; i < supportedTokens.length; i++) {
             if (supportedTokens[i] == _tokenAddress) {
-                supportedTokens[i] = supportedTokens[supportedTokens.length - 1];
+                supportedTokens[i] = supportedTokens[
+                    supportedTokens.length - 1
+                ];
                 supportedTokens.pop();
                 break;
             }
@@ -231,13 +220,14 @@ contract PaymentGatewayAerodromeUniversal is Ownable {
     /**
      * @notice Mengubah tipe pool (stable/volatile) untuk token yang sudah ada.
      */
-    function updateTokenPoolType(address _tokenAddress, bool _isStablePool) external onlyOwner {
+    function updateTokenPoolType(
+        address _tokenAddress,
+        bool _isStablePool
+    ) external onlyOwner {
         require(isSupportedToken[_tokenAddress], "Token not supported");
         tokenUsesStablePool[_tokenAddress] = _isStablePool;
         emit TokenPoolTypeUpdated(_tokenAddress, _isStablePool);
     }
-
-    // --- View Functions ---
 
     /**
      * @notice Mengembalikan daftar lengkap token yang didukung.
