@@ -19,10 +19,10 @@ async function main() {
   const contract = await Contract.deploy(
     '0x18Bc5bcC660cf2B9cE3cd51a404aFe1a0cBD3C22', // BASE IDRX Address
     // '0x01D40099fCD87C018969B0e8D4aB1633Fb34763C', // Aerodome Unoversal Router // Base
-    // '0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43', // Aerodome Router Address  // Base
+    '0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43', // Aerodome Router Address  // Base
     // '0x2626664c2603336E57B271c5C0b26F421741e481', // Uniswap Router Address // Base
     // '0xE592427A0AEce92De3Edee1F18E0157C05861564',
-    '0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45', // Velodrome Router LISK
+    // '0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45', // Velodrome Router LISK
     [
       // '0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34', // BASE
       // '0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22', // BASE
