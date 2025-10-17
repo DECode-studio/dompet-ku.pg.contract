@@ -347,13 +347,13 @@ contract PaymentGatewayVelodromeRouter is Ownable {
         if (
             hasPool(tokenIn, WETH, false) &&
             hasPool(WETH, USDT, false) &&
-            hasPool(WETH, tokenOut, false)
+            hasPool(USDT, tokenOut, false)
         ) {
             Route[] memory router = new Route[](3);
 
-            router[0] = Route({from: tokenIn, to: USDT, stable: false});
-            router[1] = Route({from: USDT, to: WETH, stable: false});
-            router[2] = Route({from: WETH, to: tokenOut, stable: false});
+            router[0] = Route({from: tokenIn, to: WETH, stable: false});
+            router[1] = Route({from: WETH, to: USDT, stable: false});
+            router[2] = Route({from: USDT, to: tokenOut, stable: false});
 
             return router;
         }
