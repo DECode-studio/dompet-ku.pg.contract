@@ -7,11 +7,11 @@
     "generate": "hardhat init",
     "compile": "hardhat compile",
     "clean": "hardhat clean",
-    "deploy": "npx hardhat run src/scripts/deploy.ts --network lisk",
+    "deploy": "npx hardhat run src/scripts/deploy.ts --network base",
     "test": "hardhat test ./src/test/*",
     "case-test": "hardhat test ./src/test/app.test.ts",
     "real-test": "hardhat test ./src/test/real.test.ts",
-    "flatten": "hardhat flatten src/contracts/PaymentGatewayVelodrome.sol > src/flattened_contracts/pg_velodrome_flattened.sol"
+    "flatten": "hardhat flatten src/contracts/PaymentGatewayAerodrome.sol > src/flattened_contracts/pg_aerodrome_flattened.sol"
   },
   "keywords": [],
   "author": "",

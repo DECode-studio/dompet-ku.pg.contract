@@ -42,9 +42,7 @@ interface IAerodromeRouter {
  */
 contract PaymentGatewayAerodromeRouter is Ownable {
     IERC20 public immutable idrxToken;
-
     IAerodromeRouter public immutable aerodromeRouter;
-
     address public constant AERODROME_FACTORY =
         0x420DD381b31aEf6683db6B902084cB0FFECe40Da;
 

@@ -6,7 +6,7 @@ async function main() {
   console.log("Deploying contracts with the account :", deployer.address);
 
   // NFT Contract
-  const Contract = await ethers.getContractFactory("PaymentGatewayVelodromeRouter")
+  const Contract = await ethers.getContractFactory("PaymentGatewayAerodromeRouter")
   // const contract = await Contract.deploy(
   //   '0xb4a911eC34eDaaEFC393c52bbD926790B9219df4', // IDRT Address
   //   '0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4', // Uniswap Router Address
@@ -24,22 +24,22 @@ async function main() {
     // '0xE592427A0AEce92De3Edee1F18E0157C05861564',
     // '0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45', // Velodrome Router LISK
     [
-      // '0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34', // BASE
-      // '0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22', // BASE
-      // '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf', // BASE
-      // '0x4200000000000000000000000000000000000006', // BASE
-      // '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // BASE
-      // '0x0555e30da8f98308edb960aa94c0db47230d2b9c', // BASE
-      '0x4200000000000000000000000000000000000006', // LISK
-      '0x03c7054bcb39f7b2e5b2c7acb37583e32d70cfa3', // LISK
-      '0xac485391eb2d7d88253a7f1ef18c37f4242d1a24', // LISK
-      '0x43f2376d5d03553ae72f4a8093bbe9de4336eb08', // LISK
+      '0x5d3a1Ff2b6BAb83b63cd9AD0787074081a52ef34', // BASE
+      '0x2ae3f1ec7f1f5012cfeab0185bfc7aa3cf0dec22', // BASE
+      '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf', // BASE
+      '0x4200000000000000000000000000000000000006', // BASE
+      '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // BASE
+      '0x0555e30da8f98308edb960aa94c0db47230d2b9c', // BASE
+      // '0x4200000000000000000000000000000000000006', // LISK
+      // '0x03c7054bcb39f7b2e5b2c7acb37583e32d70cfa3', // LISK
+      // '0xac485391eb2d7d88253a7f1ef18c37f4242d1a24', // LISK
+      // '0x43f2376d5d03553ae72f4a8093bbe9de4336eb08', // LISK
     ],
     // [ // Initial fees
     //   3000, 500, 3000, 500, 1000, 3000
     // ],
     [ // Initial stable (false = volatile, true = stable; adjust berdasarkan pool Aerodrome)
-      false, false, false, false, // false, false  // USDC true karena stable pair
+      false, false, false, false,  false, false  // USDC true karena stable pair
     ]
   )
   const contractAddress = await contract.getAddress()
