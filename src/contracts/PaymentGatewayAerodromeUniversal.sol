@@ -40,7 +40,7 @@ interface IAerodromeRouter {
  * token yang didukung dan menukarnya (swap) menjadi token IDRX
  * secara otomatis melalui Aerodrome Finance di jaringan Base.
  */
-contract PaymentGatewayAerodromeRouter is Ownable {
+contract PaymentGatewayAerodromeUniversalRouter is Ownable {
     IERC20 public immutable idrxToken;
     IAerodromeRouter public immutable aerodromeRouter;
     address public constant AERODROME_FACTORY =
